@@ -18,7 +18,8 @@ build_image() {
     echo "构建镜像: $IMAGE_NAME"
     echo "=========================================="
     # docker build --no-cache -t "$IMAGE_NAME" .
-    docker build -f "$(dirname "$0")/Dockerfile" -t "$IMAGE_NAME" "$(dirname "$0")/../.."
+    # 构建上下文用脚本所在目录 (Dockerfile 同级), 避免 ../.. 误把根目录打进上下文
+    docker build -f "$(dirname "$0")/Dockerfile" -t "$IMAGE_NAME" "$(dirname "$0")"
 }
 
 push_image() {
