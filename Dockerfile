@@ -48,14 +48,14 @@ RUN apt-get -o Acquire::Retries=5 update \
         gdb-multiarch \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 musl 交叉编译工具链 (与 os-dev 一致, U5 内核开发用)
+# 安装 musl 交叉编译工具链
 # aarch64-linux-musl-gcc + riscv64-linux-musl-gcc, 三个下载源互为备用
 RUN set -eux; \
     mkdir -p /opt/musl-cross; \
     for target in aarch64-linux-musl riscv64-linux-musl; do \
-        url1="https://download.wireguard.com/qemu-test/toolchains/20211123/${target}-cross.tgz"; \
-        url2="https://more.musl.cc/x86_64-linux-musl/${target}-cross.tgz"; \
-        url3="http://more.musl.cc/x86_64-linux-musl/${target}-cross.tgz"; \
+        url1="https://github.com/musl-cc/musl.cc/releases/download/v0.0.1/${target}-cross.tgz"; \
+        url2="https://download.wireguard.com/qemu-test/toolchains/20211123/${target}-cross.tgz"; \
+        url3="https://more.musl.cc/x86_64-linux-musl/${target}-cross.tgz"; \
         echo "Downloading ${target}-cross.tgz"; \
         curl --http1.1 -fL --retry 5 --retry-delay 3 --connect-timeout 20 \
             "$url1" -o "/tmp/${target}-cross.tgz" \
