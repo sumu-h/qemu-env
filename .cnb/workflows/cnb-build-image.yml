@@ -8,3 +8,8 @@
           script: |
             echo "image_tag=${image_tag}"
             echo "dockerfile=${dockerfile}"
+        - name: build image
+          script: |
+            cd /workspace
+            ./build.sh -b
+            ./build.sh -p

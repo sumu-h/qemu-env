@@ -3,7 +3,7 @@
 main:
   # 定时任务配置。用户 A 提交此配置后，任务触发时的执行者即为 A
   # "crontab: 30 5,17 * * *": # 使用 cron 表达式定义执行计划,表示每天在系统时区 (Asia/Shanghai) 的 5:30 AM 和 5:30 PM 各触发一次。
-  'crontab: 0 1 * * 5': # 每周五凌晨 1:00 触发，网上有解析和智能生成的小工具，搜一下就很多
+  'crontab: 0 3 * * 5': # 每周五凌晨 3:00 触发，网上有解析和智能生成的小工具，搜一下就很多
     - name: auto build # 流水线名称
       services:
         - docker
@@ -11,3 +11,7 @@ main:
         - name: print hello # 任务名称
           script: |
             echo "Hello, sumu!"
+        - name: build-and-push # 任务名称
+          script: |
+            ./build.sh -b
+            ./build.sh -p
