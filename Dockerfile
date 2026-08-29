@@ -48,6 +48,29 @@ RUN apt-get -o Acquire::Retries=5 update \
         gdb-multiarch \
     && rm -rf /var/lib/apt/lists/*
 
+# 安装内核 / U-Boot / busybox 源码编译依赖
+# bison flex:            Kconfig 语法解析器生成 (内核与 U-Boot 都需要)
+# libssl-dev:            内核 extract-cert / 模块签名
+# libelf-dev:            内核 objtool (栈校验 / ORC unwinder)
+# bc cpio:               内核编译时间戳、initramfs 打包
+# device-tree-compiler:  .dts -> .dtb 设备树编译
+# u-boot-tools:          mkimage, 打包 uImage
+# swig python3-dev:      U-Boot pylibfdt (libfdt Python 绑定) 构建
+# libgnutls28-dev uuid-dev: U-Boot mkeficapsule (EFI capsule) 工具
+# dwarves:               pahole, 内核开 CONFIG_DEBUG_INFO_BTF 生成 BTF 时需要
+RUN apt-get -o Acquire::Retries=5 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        bison flex \
+        libssl-dev \
+        libelf-dev \
+        bc cpio \
+        device-tree-compiler \
+        u-boot-tools \
+        swig python3-dev \
+        libgnutls28-dev uuid-dev \
+        dwarves \
+    && rm -rf /var/lib/apt/lists/*
+
 # 安装 musl 交叉编译工具链
 # aarch64-linux-musl-gcc + riscv64-linux-musl-gcc, 三个下载源互为备用
 RUN set -eux; \
