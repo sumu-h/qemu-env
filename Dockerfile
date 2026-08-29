@@ -31,6 +31,11 @@ RUN cd /script &&\
     bash ./clangd.sh &&\
     cd / && rm -rf /script
 
+# 安装repo
+RUN curl -o /usr/local/bin/repo https://storage.googleapis.com/git-repo-downloads/repo && \
+    chmod a+x /usr/local/bin/repo &&\
+    ln -s /usr/bin/python3 /usr/bin/python
+
 # 安装 QEMU 开发环境 (用户态 + 全系统模拟器 + 镜像工具 + 多架构调试)
 # qemu-user:        用户态模拟器 qemu-x86_64, qemu-aarch64, qemu-riscv64, qemu-arm ...
 # qemu-system-x86:  x86/x86_64 全系统模拟器
