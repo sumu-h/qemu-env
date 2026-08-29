@@ -20,8 +20,9 @@ $:
         CNB_WELCOME_CMD: |
           clear; echo "++++++++++ Hello sumu ++++++++++"
       # https://docs.cnb.cool/zh/build/build-node.html
-      # runner:
-      #   cpus: 32
+      # CPU 弹性伸缩: 申请 32 核 (https://docs.cnb.cool/zh/build/intro.html#cpu-tan-xing-shen-suo)
+      runner:
+        cpus: 32
       #   tags: cnb:arch:amd64:gpu:H20
       imports:
         - https://cnb.cool/sumu.k/secret-key/-/blob/main/llm.yml
