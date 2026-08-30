@@ -31,6 +31,13 @@ RUN cd /script &&\
     bash ./clangd.sh &&\
     cd / && rm -rf /script
 
+# 安装 opencode
+RUN git clone https://cnb.cool/sumu.k/my-linux /tmp/my-linux &&\
+    cd /tmp/my-linux/Frontend &&\
+    chmod +x *.sh &&\
+    bash -c './opencode.sh' &&\
+    rm -rf /tmp/my-linux
+
 # 安装repo
 RUN curl -o /usr/local/bin/repo https://storage.googleapis.com/git-repo-downloads/repo && \
     chmod a+x /usr/local/bin/repo &&\
