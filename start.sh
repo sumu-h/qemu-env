@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DIR="$HOME/qemu_dev"
+DEV_DIR="$HOME/qemu_dev"
+# 必须在任何 cd 之前解析：$0 为相对路径时，cd 后再算会指向 DEV_DIR 自己
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 step() {
     echo -e "\e[96m➤  $@\e[0m"
@@ -30,28 +32,27 @@ sync_code() {
 
 link_assets() {
     step "软连接 build_qemu.sh 到开发环境 ..."
-    local repo_dir item
-    repo_dir="$(cd "$(dirname "$0")" && pwd)"
+    local item
     for item in build_qemu.sh; do
-        if [ ! -e "$repo_dir/$item" ]; then
-            echo "  未找到 $repo_dir/$item，跳过"
+        if [ ! -e "$REPO_DIR/$item" ]; then
+            echo "  未找到 $REPO_DIR/$item，跳过"
             continue
         fi
         # -f 幂等覆盖旧链接/旧副本：以仓库副本为唯一源，开发环境里只放链接
-        ln -sfn "$repo_dir/$item" "$DIR/$item"
-        echo "  $DIR/$item -> $repo_dir/$item"
+        ln -sfn "$REPO_DIR/$item" "$DEV_DIR/$item"
+        echo "  $DEV_DIR/$item -> $REPO_DIR/$item"
     done
 }
 
 
 main() {
     setup_git
-    mkdir -p "$DIR"
-    cd "$DIR"
+    mkdir -p "$DEV_DIR"
+    cd "$DEV_DIR"
     init_repo
     sync_code
     link_assets
-    command -v code >/dev/null && code "$DIR" || true
+    command -v code >/dev/null && code "$DEV_DIR" || true
 }
 
 main
