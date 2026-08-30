@@ -39,7 +39,7 @@ repo sync -c -j8 --fail-fast
 
 ## 二、 编译成果物
 
-按 busybox → U-Boot → kernel 的顺序构建：initramfs 打包后的尺寸要先确定，才能写进 U-Boot 的 bootcmd。
+按 busybox → U-Boot → kernel 的顺序构建，配置统一用源码树里的 `qemu_defconfig`；整套流程也可用 `build_qemu.sh -b / -r / -c` 一键完成。
 
 ### 1. busybox 静态编译与 initramfs 制作
 
@@ -47,9 +47,8 @@ repo sync -c -j8 --fail-fast
 
 ```bash
 mkdir -p /workspace/build/busybox
-make -C /workspace/src/busybox O=/workspace/build/busybox defconfig
-sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' /workspace/build/busybox/.config
-make -C /workspace/src/busybox O=/workspace/build/busybox -j32 CROSS_COMPILE=aarch64-linux-musl-
+make -C /workspace/src/busybox O=/workspace/build/busybox qemu_defconfig
+make -C /workspace/src/busybox O=/workspace/build/busybox -j32
 ```
 
 产物 `build/busybox/busybox`：ELF 64-bit ARM aarch64，static-pie，1.27 MB。
@@ -57,9 +56,8 @@ make -C /workspace/src/busybox O=/workspace/build/busybox -j32 CROSS_COMPILE=aar
 #### 1.2 安装到 rootfs 并制作骨架
 
 ```bash
-# 关键：install 也必须带 CROSS_COMPILE，否则会用主机 gcc 重编出 x86-64 二进制（见第五节排查记录）
 make -C /workspace/src/busybox O=/workspace/build/busybox \
-     CROSS_COMPILE=aarch64-linux-musl- CONFIG_PREFIX=/workspace/build/rootfs install
+     CONFIG_PREFIX=/workspace/build/rootfs install
 
 cd /workspace/build/rootfs
 mkdir -p dev proc sys tmp etc root mnt run
@@ -89,14 +87,28 @@ sync
 poweroff -f
 ```
 
+交互模式（`-r`）的 `/init` 则在挂载后 `exec /sbin/init`，由 `/etc/inittab` 在串口常驻 shell。
+
 #### 1.4 cpio 打包
 
 ```bash
 cd /workspace/build/rootfs
 find . -print0 | cpio --null -o -H newc --owner=0:0 2>/dev/null | gzip -9 \
     > /workspace/build/rootfs.cpio.gz
-# 产物 752863 字节 = 0xb7cdf（该尺寸要写进 U-Boot 的 bootcmd）
+truncate -s 4M /workspace/build/rootfs.cpio.gz   # 零填充到固定 0x400000
 ```
+
+产物固定 4194304 字节 = 0x400000。
+
+#### 1.5 busybox 必须静态编译吗？
+
+不是"必须"，但对 initramfs 方案强烈建议静态。决定性因素是**动态链接的依赖链要自己补齐**：
+
+- **静态（本文方案）**：单个 `bin/busybox` 自包含，放进 cpio 就能跑；musl 工具链对静态链接支持完善，没有 glibc 静态化的 NSS 类坑；
+- **动态**：cpio 里必须额外附带 ELF 解释器与 libc。musl 只需一个文件——把工具链的 `aarch64-linux-musl/lib/libc.so` 拷入 rootfs `/lib/libc.so`，再建软链 `/lib/ld-musl-aarch64.so.1 -> /lib/libc.so` 即可（musl 的加载器与 libc 本就是同一个文件）；glibc 则要 `ld-linux-aarch64.so.1` + `libc.so.6` 等一串，还得用 `readelf -d` 逐个核对 NEEDED 依赖；
+- **什么时候动态合适**：切换到真实 rootfs（如 virtio-blk 挂 ext4 根分区）后，库都在根分区里，动态 busybox 更省体积也完全正常。
+
+另注意：静态与否与第四节的 ENOEXEC 事故无关——那是架构错误（x86-64 误编）。静态链接解决"少带文件"，`CONFIG_CROSS_COMPILER_PREFIX` 固化解决"编对架构"。
 
 ### 2. U-Boot
 
@@ -108,33 +120,30 @@ QEMU `virt` 板卡上由 U-Boot 自动引导内核的方案分三步：
 2. U-Boot 从 pflash（`-bios`）启动，执行烧入默认环境的 `bootcmd`；
 3. QEMU 生成的设备树位于 `$fdt_addr = 0x40000000`（见 u-boot 源码 `board/emulation/qemu-arm/qemu-arm.env`）。
 
-因此把 `bootargs` 和 `booti` 命令烘焙进 U-Boot 默认环境，上电即可全自动引导（initrd 大小硬编码为打包后的实际尺寸）：
+因此把 `bootargs` 和 `booti` 命令烘焙进 U-Boot 默认环境，上电即可全自动引导（initrd 尺寸固定 `0x400000`，对应 1.4 的零填充）：
 
 ```sh
-# build/uboot/.config（qemu_arm64_defconfig 基础上修改）
-CONFIG_BOOTCOMMAND="setenv bootargs console=ttyAMA0,115200 rdinit=/init; booti 0x44000000 0x60000000:0xb7cdf ${fdt_addr}"
+# configs/qemu_defconfig（在 qemu_arm64_defconfig 基础上烘焙）
+CONFIG_USE_BOOTCOMMAND=y
+CONFIG_BOOTCOMMAND="setenv bootargs console=ttyAMA0,115200 rdinit=/init; booti 0x44000000 0x60000000:0x400000 ${fdt_addr}"
 ```
 
 #### 2.2 编译步骤
 
 ```bash
 mkdir -p /workspace/build/uboot
-make -C /workspace/src/u-boot O=/workspace/build/uboot CROSS_COMPILE=aarch64-linux-musl- qemu_arm64_defconfig
-
-./scripts/config --file /workspace/build/uboot/.config --set-str CONFIG_BOOTCOMMAND \
-  "setenv bootargs console=ttyAMA0,115200 rdinit=/init; booti 0x44000000 0x60000000:0xb7cdf \${fdt_addr}"
-make -C /workspace/src/u-boot O=/workspace/build/uboot CROSS_COMPILE=aarch64-linux-musl- olddefconfig
+make -C /workspace/src/u-boot O=/workspace/build/uboot CROSS_COMPILE=aarch64-linux-musl- qemu_defconfig
 make -C /workspace/src/u-boot O=/workspace/build/uboot CROSS_COMPILE=aarch64-linux-musl- -j8
 ```
 
-产物 `build/uboot/u-boot.bin`（1.5 MB）。注意 initramfs 重新打包后尺寸会变，需要同步更新 bootcmd 中的 `:0x<尺寸>` 再重编。
+产物 `build/uboot/u-boot.bin`（1.5 MB）。
 
 ### 3. kernel
 
 ```bash
 mkdir -p /workspace/build/kernel
 make -C /workspace/src/kernel O=/workspace/build/kernel ARCH=arm64 \
-     CROSS_COMPILE=aarch64-linux-musl- defconfig
+     CROSS_COMPILE=aarch64-linux-musl- qemu_defconfig
 make -C /workspace/src/kernel O=/workspace/build/kernel ARCH=arm64 \
      CROSS_COMPILE=aarch64-linux-musl- -j32
 ```
@@ -151,6 +160,8 @@ qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1G -no-reboot -nographic \
   -device loader,file=Image,addr=0x44000000,force-raw=on \
   -device loader,file=rootfs.cpio.gz,addr=0x60000000,force-raw=on
 ```
+
+以上为 `-r test`（验证模式）的等价命令；交互模式 `-r` 去掉 `-no-reboot`、加载 `rootfs-shell.cpio.gz`。
 
 ### 2. 串口日志关键节点
 
