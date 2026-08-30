@@ -96,3 +96,17 @@ RUN set -eux; \
     done
 
 ENV PATH="/opt/musl-cross/aarch64-linux-musl-cross/bin:/opt/musl-cross/riscv64-linux-musl-cross/bin:${PATH}"
+
+# ==================== QEMU virt 板卡一键启动 (qemu_boot) ====================
+# 编译产物在仓库之外的 ~/qemu_dev 下, Docker COPY 够不到, 由 start.sh -b 编译后
+# 拷入构建上下文 .qemu/ 再 COPY 进镜像; 仓库内置 .gitkeep 占位, 未编译时 .qemu/ 为空,
+# qemu_boot 会给出打包提示
+#   u-boot.bin:            U-Boot BIOS (qemu_boot 以 -bios pflash 加载)
+#   Image:                 内核 (loader 预加载 0x44000000)
+#   rootfs-shell.cpio.gz:  交互终端 initramfs (qemu_boot 默认加载 0x60000000)
+#   rootfs.cpio.gz:        自动验证 initramfs (qemu_boot --test)
+COPY .qemu/ /root/.qemu/
+
+# 一键启动命令: 容器内敲 qemu_boot 直接启动虚拟板卡 (docker run 需加 -it 交互)
+COPY qemu_boot.sh /usr/local/bin/qemu_boot
+RUN chmod 755 /usr/local/bin/qemu_boot

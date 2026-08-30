@@ -1,0 +1,4 @@
+# start.sh -b 编译后从 ~/qemu_dev 拷入的成果物, 不入库;
+# .gitkeep 占位保证全新 clone 时 .qemu/ 目录存在, Dockerfile 的 COPY .qemu/ 不报错
+.qemu/*
+!.qemu/.gitkeep
