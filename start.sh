@@ -29,10 +29,10 @@ sync_code() {
 }
 
 link_assets() {
-    step "软连接 build_qemu.sh 与 docs/ 到开发环境 ..."
+    step "软连接 build_qemu.sh 到开发环境 ..."
     local repo_dir item
     repo_dir="$(cd "$(dirname "$0")" && pwd)"
-    for item in build_qemu.sh docs; do
+    for item in build_qemu.sh; do
         if [ ! -e "$repo_dir/$item" ]; then
             echo "  未找到 $repo_dir/$item，跳过"
             continue
