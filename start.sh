@@ -9,8 +9,8 @@ step() {
 
 setup_git() {
     step "设置git信息..."
-    git config --global user.name "cnb"
-    git config --global user.email "cnb@cnb.local"
+    git config --global user.name "sumu"
+    git config --global user.email "2038035593@qq.com"
 }
 
 init_repo() {
