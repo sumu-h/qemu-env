@@ -28,6 +28,21 @@ sync_code() {
     .repo/repo/repo sync -c -j$(nproc 2>/dev/null || echo 4)
 }
 
+link_assets() {
+    step "软连接 build_qemu.sh 与 docs/ 到开发环境 ..."
+    local repo_dir item
+    repo_dir="$(cd "$(dirname "$0")" && pwd)"
+    for item in build_qemu.sh docs; do
+        if [ ! -e "$repo_dir/$item" ]; then
+            echo "  未找到 $repo_dir/$item，跳过"
+            continue
+        fi
+        # -f 幂等覆盖旧链接/旧副本：以仓库副本为唯一源，开发环境里只放链接
+        ln -sfn "$repo_dir/$item" "$DIR/$item"
+        echo "  $DIR/$item -> $repo_dir/$item"
+    done
+}
+
 
 main() {
     setup_git
@@ -35,6 +50,7 @@ main() {
     cd "$DIR"
     init_repo
     sync_code
+    link_assets
     command -v code >/dev/null && code "$DIR" || true
 }
 
