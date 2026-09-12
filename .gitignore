@@ -1,4 +1,6 @@
-# start.sh -b 编译后从 ~/qemu_dev 拷入的成果物, 不入库;
-# .gitkeep 占位保证全新 clone 时 .qemu/ 目录存在, Dockerfile 的 COPY .qemu/ 不报错
-.qemu/*
-!.qemu/.gitkeep
+# .qemu/ 内的 QEMU 启动成果物 (u-boot.bin / Image / rootfs x2) 随仓库分发:
+# 全新 clone 即自带产物, 无需重新编译 busybox/u-boot/kernel/rootfs,
+# docker build 可直接 COPY 进镜像 (/root/.qemu) 供 qemu_boot 一键启动
+# 仅忽略 QEMU_DIR 指向本目录运行时产生的一次性文件, 不忽略成果物
+.qemu/*.log
+.qemu/qemu.pid
