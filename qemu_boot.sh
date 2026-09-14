@@ -24,7 +24,8 @@ KERNEL="$QEMU_DIR/Image"
 INITRAMFS_SHELL="$QEMU_DIR/rootfs-shell.cpio.gz"   # 交互终端版(默认)
 INITRAMFS_TEST="$QEMU_DIR/rootfs.cpio.gz"          # 自动验证版(--test)
 INITRAMFS_SIZE=$((4 * 1024 * 1024))    # 0x400000, 与 U-Boot BOOTCOMMAND 固定加载长度对应
-VM_SSH_FWD="${VM_SSH_FWD:-tcp::2222-:22}"
+# 用 ${VAR-默认值} 而非 ${VAR:-默认值}: 显式置空 (VM_SSH_FWD=) 表示不做转发, 只留网卡
+VM_SSH_FWD="${VM_SSH_FWD-tcp::2222-:22}"
 PIDFILE="$QEMU_DIR/qemu.pid"
 SERIAL_TCP_DEFAULT="127.0.0.1:4444"
 # MAC 必须与 rootfs /etc/rc.sh 的按 MAC 配网一致, 否则 guest 网卡配不到 IP (SLIRP: 10.0.2.15)
@@ -172,9 +173,11 @@ main() {
             --serial-tcp)
                 shift
                 case "${1:-}" in
-                    stop)   serial_tcp="stop" ;;
-                    [0-9]*) serial_tcp="$1" ;;
-                    *)      serial_tcp="$SERIAL_TCP_DEFAULT"; continue ;;  # 不带目标: 默认端口, 该参数留给后续解析
+                    stop)  serial_tcp="stop" ;;     # 停止后台板卡 (不启动新的)
+                    # 后面没跟目标 (参数用尽, 或紧跟的是选项/透传参数): 用默认端口,
+                    # continue 跳过本轮 shift, 让该参数留给下一轮正常解析
+                    ""|-*) serial_tcp="$SERIAL_TCP_DEFAULT"; continue ;;
+                    *)     serial_tcp="$1" ;;       # [host:]port 目标, 只给端口时下面补 127.0.0.1
                 esac
                 ;;
             --wait) wait_on=1 ;;
@@ -212,12 +215,16 @@ main() {
     # 验证模式保持单发语义: panic/重启即退出 QEMU, 冒烟测试不死循环
     [ "$cpio" = "$INITRAMFS_SHELL" ] || pre_args=(-no-reboot)
 
+    # VM_SSH_FWD 为空表示不转发端口 (关掉 SSH 入口), 只保留一张能上网的网卡
+    local netdev_opt="user,id=net0"
+    [ -n "$VM_SSH_FWD" ] && netdev_opt="$netdev_opt,hostfwd=$VM_SSH_FWD"
+
     local -a qemu_cmd=(
         qemu-system-aarch64 -machine virt -cpu cortex-a57 -m 1G
         -bios "$UBOOT"
         -device "loader,file=$KERNEL,addr=0x44000000,force-raw=on"
         -device "loader,file=$cpio,addr=0x60000000,force-raw=on"
-        -netdev "user,id=net0,hostfwd=$VM_SSH_FWD"
+        -netdev "$netdev_opt"
         -device "virtio-net-pci,netdev=net0,mac=$NET_MAC_USR"
         "${pre_args[@]}" "${qemu_args[@]}"
     )
