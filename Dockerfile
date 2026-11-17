@@ -60,6 +60,27 @@ RUN apt-get -o Acquire::Retries=5 update \
         gdb-multiarch \
     && rm -rf /var/lib/apt/lists/*
 
+# 从源码编译 QEMU 所需依赖
+# 上面装的 qemu-* 是发行版预编译包, 只能"直接用"; 编译 qemu/ 源码树还需要以下开发包
+# pkg-config:       configure / meson 探测库
+# libglib2.0-dev:   QEMU 核心对象系统与事件循环 (要求 >= 2.66)
+# libpixman-1-dev:  像素合成, 显示与帧缓冲 (要求 >= 0.21.8)
+# libsdl2-dev:      SDL2 显示后端, 板卡 GUI / LCD / 触摸界面
+# libslirp-dev:     用户态网络协议栈 (QEMU 5.2 起 slirp 移出源码树)
+# ninja-build:      meson 的构建后端 (QEMU 5.0 起改用 meson + ninja)
+# python3-tomli:    QEMU configure 的 mkvenv 解析自带 meson wheel 时需要
+# 注: meson 无需安装, QEMU 自带 python/wheels/meson-*.whl, configure 会建 venv 装上
+RUN apt-get -o Acquire::Retries=5 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        pkg-config \
+        libglib2.0-dev \
+        libpixman-1-dev \
+        libsdl2-dev \
+        libslirp-dev \
+        ninja-build \
+        python3-tomli \
+    && rm -rf /var/lib/apt/lists/*
+
 # 安装内核 / U-Boot / busybox 源码编译依赖
 # bison flex:            Kconfig 语法解析器生成 (内核与 U-Boot 都需要)
 # libssl-dev:            内核 extract-cert / 模块签名
