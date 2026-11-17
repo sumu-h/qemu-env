@@ -125,6 +125,19 @@ RUN set -eux; \
 
 ENV PATH="/opt/musl-cross/aarch64-linux-musl-cross/bin:/opt/musl-cross/riscv64-linux-musl-cross/bin:${PATH}"
 
+# 安装 ARM32 (armhf) 交叉工具链
+# 用途: 编译 i.MX6ULL 等 32 位 ARM 板卡的内核 / U-Boot / busybox / 用户态程序
+# 说明: 上面的 musl 工具链只覆盖 aarch64 与 riscv64, 不含 armv7; 6ULL 是 Cortex-A7 (32 位)
+# gcc-arm-linux-gnueabihf:    armv7 交叉编译器, 走 glibc (内核/busybox 足够用)
+# libc6-dev-armhf-cross:      armhf 交叉头文件与库, 缺它编译报 bits/libc-header-start.h 找不到
+# linux-libc-dev-armhf-cross: 上者的依赖, 附带 armhf 内核头文件
+RUN apt-get -o Acquire::Retries=5 update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+        gcc-arm-linux-gnueabihf \
+        libc6-dev-armhf-cross \
+        linux-libc-dev-armhf-cross \
+    && rm -rf /var/lib/apt/lists/*
+
 # ==================== QEMU virt 板卡一键启动 (qemu_boot) ====================
 # 编译产物在仓库之外的 ~/qemu_dev 下, Docker COPY 够不到, 由 start.sh -b 编译后
 # 拷入构建上下文 .qemu/ 再 COPY 进镜像; 仓库内置 .gitkeep 占位, 未编译时 .qemu/ 为空,
