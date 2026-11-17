@@ -12,7 +12,8 @@ usage() {
     cat <<'EOF'
 用法: ./start.sh [选项]
 选项:
-  (无参数)  仅准备代码环境: repo init + sync 拉齐 ~/qemu_dev
+  (无参数)  仅准备代码环境: repo init + sync 拉齐 ~/qemu_dev,
+            并为各仓库创建与远程同名的本地分支 (避免停在游离 HEAD)
   -b        拉代码后准备 QEMU 启动成果物并拷贝到本目录 .qemu/:
             产物已存在则跳过编译直接拷贝, 缺失才编译
   -f        强制重新编译 (含 -b 行为, 忽略已有产物)
@@ -36,9 +37,92 @@ init_repo() {
         --repo-url https://gitee.com/sumumm/git-repo
 }
 
+repo_bin() {
+    if [ -x .repo/repo/repo ]; then
+        echo ".repo/repo/repo"
+    else
+        echo repo
+    fi
+}
+
 sync_code() {
     step "repo 同步代码 ..."
-    .repo/repo/repo sync -c -j$(nproc 2>/dev/null || echo 4)
+    local repo_cmd attempt jobs
+    repo_cmd="$(repo_bin)"
+    jobs="$(nproc 2>/dev/null || echo 4)"
+    for attempt in 1 2 3; do
+        if "$repo_cmd" sync -c -j"$jobs"; then
+            echo "    代码同步完成"
+            return 0
+        fi
+        [ "$attempt" -lt 3 ] || break
+        echo "    ⚠ 第 $attempt 次同步失败, 5 秒后重试 ..." >&2
+        sleep 5
+    done
+    echo "❌ repo sync 连续失败, 请检查网络后重跑 (已拉取部分不会丢失)" >&2
+    exit 1
+}
+
+# repo sync 只检出 commit, 各仓库会停在游离 HEAD, 后续 commit/push 都不方便。
+# 这里逐个仓库解析出它对应远程分支名, 建同名本地分支并设置上游;
+# 已经在本地区分支上的仓库不动, 因此可反复执行。
+ensure_branches() {
+    step "为各仓库创建本地分支 ..."
+    local out flag path branch n_ok=0 n_warn=0
+    out="$("$(repo_bin)" forall -c '
+        # 已在某个本地分支上: 不动
+        git symbolic-ref -q HEAD >/dev/null 2>&1 && exit 0
+
+        remote="${REPO_REMOTE:-origin}"
+        rev="$REPO_RREV"
+        branch=""
+
+        # 1) 清单写的是分支名, 且远端存在同名分支
+        if [ -n "$rev" ] && git rev-parse --verify --quiet "refs/remotes/$remote/$rev" >/dev/null 2>&1; then
+            branch="$rev"
+        else
+            # 2) 清单写的是 SHA: 取当前 HEAD 恰好指向的远端分支 (跳过 repo 的 m/ 伪远端)
+            branch="$(git for-each-ref --points-at HEAD --format="%(refname)" refs/remotes 2>/dev/null |
+                      grep -v "^refs/remotes/m/" |
+                      sed -n "s|^refs/remotes/[^/]*/||p" |
+                      grep -vx "HEAD" | sort | head -1)"
+        fi
+
+        if [ -z "$branch" ]; then
+            echo "WARN|$REPO_PATH|无法确定远程分支名 (revision=${rev:-未指定}), 保持游离"
+            exit 0
+        fi
+
+        if git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null 2>&1; then
+            git checkout "$branch" >/dev/null 2>&1 || {
+                echo "WARN|$REPO_PATH|切换到已有分支 $branch 失败"
+                exit 0
+            }
+        else
+            git checkout -b "$branch" >/dev/null 2>&1 || {
+                echo "WARN|$REPO_PATH|创建分支 $branch 失败"
+                exit 0
+            }
+            # 上游指向同名远程分支, 后续 push/pull 无需再指定
+            git branch --set-upstream-to="$remote/$branch" "$branch" >/dev/null 2>&1 || true
+        fi
+        echo "OK|$REPO_PATH|$branch"
+    ' 2>&1 || true)"
+
+    while IFS='|' read -r flag path branch; do
+        case "$flag" in
+            OK)
+                n_ok=$((n_ok + 1))
+                echo "    $path -> $branch"
+                ;;
+            WARN)
+                n_warn=$((n_warn + 1))
+                echo "    ⚠ $path: $branch" >&2
+                ;;
+        esac
+    done <<<"$out"
+
+    echo "    分支就绪 $n_ok 个, 未处理 $n_warn 个"
 }
 
 # 定位完整产物目录 (u-boot/Image/rootfs x2 齐全才算完整): 顶层软链跑在 ~/qemu_dev/build/,
@@ -108,6 +192,7 @@ main() {
     cd "$DEV_DIR"
     init_repo
     sync_code
+    ensure_branches
     if [ "$do_build" -eq 1 ]; then
         build_artifacts "$force_build"
         stage_artifacts
